@@ -1,5 +1,3 @@
-import axios from 'axios';
-
 const API_KEY = import.meta.env.VITE_WEATHER_API_KEY as string;
 const BASE_URL = 'https://api.weatherapi.com/v1';
 
@@ -39,12 +37,19 @@ export interface AirQualityData {
   pm10: number;
 }
 
-export const fetchWeatherData = async (city: string): Promise<WeatherData> => {
-  const response = await axios.get(`${BASE_URL}/current.json`, {
-    params: { key: API_KEY, q: city, aqi: 'yes' },
-  });
+const fetchData = async (endpoint: string, params: Record<string, string>) => {
+  const query = new URLSearchParams({ key: API_KEY, ...params }).toString();
+  const response = await fetch(`${BASE_URL}/${endpoint}?${query}`);
 
-  const data = response.data;
+  if (!response.ok) {
+    throw new Error(`Failed to fetch data: ${response.status}`);
+  }
+
+  return response.json();
+};
+
+export const fetchWeatherData = async (city: string): Promise<WeatherData> => {
+  const data = await fetchData('forecast.json', { q: city, aqi: 'yes', days: '1' });
 
   return {
     name: data.location.name,
@@ -58,19 +63,17 @@ export const fetchWeatherData = async (city: string): Promise<WeatherData> => {
     pressure: data.current.pressure_mb,
     visibility: data.current.vis_km,
     uvIndex: data.current.uv,
-    sunrise: data.forecast?.forecastday?.[0]?.astro?.sunrise || '',
-    sunset: data.forecast?.forecastday?.[0]?.astro?.sunset || '',
+    sunrise: data.forecast.forecastday[0].astro.sunrise,
+    sunset: data.forecast.forecastday[0].astro.sunset,
   };
 };
 
 export const fetchForecastData = async (city: string): Promise<ForecastItem[]> => {
-  const response = await axios.get(`${BASE_URL}/forecast.json`, {
-    params: { key: API_KEY, q: city, days: 3, aqi: 'yes', alerts: 'no' },
-  });
+  const data = await fetchData('forecast.json', { q: city, days: '3', aqi: 'yes', alerts: 'no' });
 
   const hourly: ForecastItem[] = [];
 
-  response.data.forecast.forecastday.forEach((day: any) => {
+  data.forecast.forecastday.forEach((day: any) => {
     day.hour.forEach((hour: any) => {
       hourly.push({
         dt: new Date(hour.time).getTime(),
@@ -87,11 +90,9 @@ export const fetchForecastData = async (city: string): Promise<ForecastItem[]> =
 };
 
 export const fetchDailyForecast = async (city: string): Promise<ForecastItem[]> => {
-  const response = await axios.get(`${BASE_URL}/forecast.json`, {
-    params: { key: API_KEY, q: city, days: 10, aqi: 'yes', alerts: 'no' },
-  });
+  const data = await fetchData('forecast.json', { q: city, days: '10', aqi: 'yes', alerts: 'no' });
 
-  return response.data.forecast.forecastday.map((day: any) => ({
+  return data.forecast.forecastday.map((day: any) => ({
     dt: new Date(day.date).getTime(),
     temp: day.day.avgtemp_c,
     tempMin: day.day.mintemp_c,
@@ -104,11 +105,9 @@ export const fetchDailyForecast = async (city: string): Promise<ForecastItem[]> 
 };
 
 export const fetchAirQuality = async (city: string): Promise<AirQualityData> => {
-  const response = await axios.get(`${BASE_URL}/current.json`, {
-    params: { key: API_KEY, q: city, aqi: 'yes' },
-  });
+  const data = await fetchData('current.json', { q: city, aqi: 'yes' });
 
-  const air = response.data.current.air_quality;
+  const air = data.current.air_quality;
 
   return {
     aqi: Math.round(air['us-epa-index']),
